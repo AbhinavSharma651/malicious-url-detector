@@ -1,0 +1,12 @@
+# Full dev / training environment (python 3.11)
+fastapi==0.115.12
+uvicorn==0.34.2
+pydantic==2.11.4
+numpy==2.2.5
+pandas==2.2.3
+scikit-learn==1.6.1
+joblib==1.4.2
+xgboost-cpu==2.1.4
+mlflow==2.22.0
+pytest==8.3.5
+httpx==0.28.1

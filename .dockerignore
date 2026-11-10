@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.github/
+mlruns/
+mlflow.db
+data/
+tests/
+scripts/
+logs/
+.pytest_cache/
+README.md
+train.py
+check_drift.py

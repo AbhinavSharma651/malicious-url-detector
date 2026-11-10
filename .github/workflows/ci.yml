@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  train-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Train a quick baseline model
+        # Small sample so CI stays fast; --force overwrites any committed model in this CI workspace only.
+        run: python train.py --algorithm random_forest --n_estimators 50 --max_depth 12 --sample 80000 --force --run_name ci-baseline
+
+      - name: Run tests
+        run: pytest -v --tb=short
+
+      - name: Build Docker image
+        run: docker build -t malicious-url-detector .
+
+      - name: Smoke-test the container
+        run: |
+          docker run -d --name mud -p 8000:8000 malicious-url-detector
+          for i in $(seq 1 30); do curl -fsS http://localhost:8000/health && break; sleep 2; done
+          curl -fsS -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d '{"url":"github.com/torvalds/linux"}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d '{"url":""}')" = "422"
+          docker logs mud

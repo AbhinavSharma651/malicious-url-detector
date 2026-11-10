@@ -1,0 +1,8 @@
+# Lean serving runtime: no MLflow, pytest, httpx or pandas.
+fastapi==0.115.12
+uvicorn==0.34.2
+pydantic==2.11.4
+numpy==2.2.5
+scikit-learn==1.6.1
+joblib==1.4.2
+xgboost-cpu==2.1.4

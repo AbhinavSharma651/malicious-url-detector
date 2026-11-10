@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Malicious URL Detector</title>
+<style>
+  :root { --bg:#f5f7fa; --card:#fff; --text:#1d2733; --muted:#5f6b7a; --line:#dde3ea;
+          --ok:#1b8a4b; --warn:#c77700; --bad:#c62828; --accent:#2457d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12161c; --card:#1b212a; --text:#e8edf3; --muted:#9aa7b6; --line:#2d3643;
+            --ok:#4cc783; --warn:#f0a63a; --bad:#ff6b6b; --accent:#7ea2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:760px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+  label { font-weight:600; display:block; margin-bottom:8px; }
+  .row { display:flex; gap:8px; }
+  input[type=text] { flex:1; min-width:0; padding:12px; font-size:1rem; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+  button { padding:12px 20px; font-size:1rem; border:0; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .examples { margin-top:12px; font-size:.9rem; color:var(--muted); }
+  .examples button { background:transparent; color:var(--accent); border:1px solid var(--line); padding:4px 10px; font-size:.85rem; margin:4px 6px 0 0; font-weight:500; }
+  .error { color:var(--bad); margin-top:12px; white-space:pre-wrap; }
+  .verdict { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .badge { padding:6px 14px; border-radius:999px; color:#fff; font-weight:700; text-transform:uppercase; font-size:.85rem; }
+  .low { background:var(--ok); } .medium { background:var(--warn); } .high { background:var(--bad); }
+  .score { font-size:1.1rem; }
+  .bars { margin:16px 0 0; }
+  .bar { display:grid; grid-template-columns:110px 1fr 56px; gap:8px; align-items:center; margin:6px 0; font-size:.9rem; }
+  .track { height:10px; background:var(--line); border-radius:6px; overflow:hidden; }
+  .fill { height:100%; background:var(--accent); }
+  h2 { font-size:1.05rem; margin:0 0 8px; }
+  ul { margin:0; padding-left:20px; } li { margin:6px 0; }
+  .notice { font-size:.9rem; color:var(--muted); border-left:3px solid var(--warn); padding-left:10px; margin-top:12px; }
+  details { margin-top:8px; } summary { cursor:pointer; color:var(--muted); }
+  table { border-collapse:collapse; width:100%; font-size:.85rem; margin-top:8px; }
+  td { padding:3px 6px; border-bottom:1px solid var(--line); } td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+  footer { color:var(--muted); font-size:.85rem; margin-top:24px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Malicious URL Detector</h1>
+  <p class="sub">Paste a link. The model reads the URL text only (never visits it) and scores it as benign, defacement, malware or phishing.</p>
+
+  <section class="card">
+    <label for="url">URL to check</label>
+    <div class="row">
+      <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="e.g. github.com/torvalds/linux">
+      <button id="go" type="button">Check</button>
+    </div>
+    <div class="examples">Try an example:
+      <button type="button" data-url="github.com/torvalds/linux">bare, normal</button>
+      <button type="button" data-url="http://192.168.0.1/paypal-secure-login/verify/account.php?id=3&amp;update=1">IP + login words</button>
+      <button type="button" data-url="http://bit.ly/3xYz9Qa">shortened link</button>
+    </div>
+    <div id="error" class="error" role="alert" hidden></div>
+  </section>
+
+  <section id="result" class="card" hidden aria-live="polite">
+    <div class="verdict">
+      <span id="badge" class="badge"></span>
+      <span class="score" id="score"></span>
+    </div>
+    <div class="bars" id="bars"></div>
+    <h2 style="margin-top:20px">What to do</h2>
+    <ul id="tips"></ul>
+    <div id="notice" class="notice" hidden></div>
+    <details><summary>Signals extracted from the URL</summary><table id="features"></table></details>
+  </section>
+
+  <footer>API docs: <a href="/docs">/docs</a> &middot; This is a lexical model; it can be wrong. Do not rely on it as your only safeguard.</footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const input = $("url"), button = $("go");
+
+document.querySelectorAll(".examples button").forEach((b) => {
+  b.addEventListener("click", () => { input.value = b.dataset.url; check(); });
+});
+input.addEventListener("keydown", (e) => { if (e.key === "Enter") check(); });
+button.addEventListener("click", check);
+
+function showError(msg) { $("error").textContent = msg; $("error").hidden = !msg; }
+
+function formatDetail(detail) {
+  if (!Array.isArray(detail)) return String(detail);
+  return detail.map((d) => (d.loc ? d.loc.slice(1).join(".") + ": " : "") + d.msg).join("\n");
+}
+
+async function check() {
+  showError("");
+  const url = input.value.trim();
+  button.disabled = true; button.textContent = "Checking…";
+  try {
+    const res = await fetch("/predict", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+    const data = await res.json();
+    if (!res.ok) { $("result").hidden = true; showError("Invalid input (HTTP " + res.status + "):\n" + formatDetail(data.detail)); return; }
+    render(data);
+  } catch (err) {
+    $("result").hidden = true; showError("Could not reach the server. Please try again.");
+  } finally {
+    button.disabled = false; button.textContent = "Check";
+  }
+}
+
+function render(d) {
+  const badge = $("badge");
+  badge.className = "badge " + d.risk_level;
+  badge.textContent = d.is_malicious ? d.predicted_class : "benign";
+  $("score").textContent = "Risk: " + d.risk_level + " · P(malicious) = " + (d.malicious_probability * 100).toFixed(1) + "%";
+
+  const bars = $("bars"); bars.replaceChildren();
+  Object.entries(d.probabilities).sort((a, b) => b[1] - a[1]).forEach(([name, p]) => {
+    const row = document.createElement("div"); row.className = "bar";
+    const label = document.createElement("span"); label.textContent = name;
+    const track = document.createElement("div"); track.className = "track";
+    const fill = document.createElement("div"); fill.className = "fill"; fill.style.width = (p * 100).toFixed(1) + "%";
+    track.appendChild(fill);
+    const pct = document.createElement("span"); pct.textContent = (p * 100).toFixed(1) + "%"; pct.style.textAlign = "right";
+    row.append(label, track, pct); bars.appendChild(row);
+  });
+
+  const tips = $("tips"); tips.replaceChildren();
+  (d.tips || []).forEach((t) => { const li = document.createElement("li"); li.textContent = t; tips.appendChild(li); });
+
+  $("notice").textContent = d.notice || ""; $("notice").hidden = !d.notice;
+
+  const table = $("features"); table.replaceChildren();
+  Object.entries(d.features || {}).forEach(([k, v]) => {
+    const tr = document.createElement("tr");
+    const a = document.createElement("td"); a.textContent = k;
+    const b = document.createElement("td"); b.textContent = Number.isInteger(v) ? v : v.toFixed(3);
+    tr.append(a, b); table.appendChild(tr);
+  });
+  $("result").hidden = false;
+}
+</script>
+</body>
+</html>
