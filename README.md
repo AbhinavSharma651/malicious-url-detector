@@ -155,7 +155,7 @@ Deploy the Docker image on Render, Railway or an EC2 t3.micro (`--restart unless
 **Drift check (bonus):** `python check_drift.py` compares the mean/std of the logged features with the training statistics saved in the
 model bundle and exits with code 1 if drift is flagged. Retrain when drift is flagged, or when labelled feedback shows macro-F1 has dropped.
 
-## 11. Limitations (important – be ready to explain them in the viva)
+## 11. Limitations 
 
 * **Dataset shortcut.** 91.7 % of benign URLs in the dataset have no `http(s)://` prefix, 100 % of defacement URLs start with `http://`, and only 0.5 % of benign
   URLs use `https://`. The model learns this, so a link such as `https://www.google.com/` can score as malicious while `github.com/torvalds/linux` scores benign.
@@ -165,7 +165,7 @@ model bundle and exits with code 1 if drift is flagged. Retrain when drift is fl
 * Phishing is usually the weakest class (check the per-class report in MLflow); do not use the service as the only safeguard.
 * Logged URLs may be sensitive; protect or rotate the log file in a real deployment.
 
-## 12. Team
+## 12. Member
 
 | Name |
 |---|
