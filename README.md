@@ -165,20 +165,8 @@ model bundle and exits with code 1 if drift is flagged. Retrain when drift is fl
 * Phishing is usually the weakest class (check the per-class report in MLflow); do not use the service as the only safeguard.
 * Logged URLs may be sensitive; protect or rotate the log file in a real deployment.
 
-## 12. Likely viva questions
+## 12. Team
 
-* *Why two requirements files?* Serving needs 7 packages; training adds MLflow, pandas, pytest and httpx. A smaller image builds faster and has a smaller attack surface.
-* *What if a feature arrives as NaN / null?* `POST /predict/features` returns 422 (strict floats with `allow_inf_nan=False`). `POST /predict` derives features itself, so it cannot produce NaN.
-* *How do you know it needs retraining?* `check_drift.py` flags shifted inputs; falling macro-F1 on labelled feedback; new URL patterns (new TLDs, shorteners).
-* *Why load the model at startup?* `joblib.load` of a 10 MB model on every request would add latency and memory churn; it is read once at import time in `app.py`.
-* *Why `P(malicious) = 1 - P(benign)`?* The four classes are different kinds of badness; a user mostly needs “is it safe or not”, then the threat type.
-
-## 13. Screenshots
-
-`TODO – UI, /docs, MLflow UI (3+ runs), pytest -v output, green CI check`
-
-## 14. Team
-
-| Name | Roll no. | Contribution |
-|---|---|---|
-| TODO | TODO | TODO |
+| Name |
+|---|
+| Abhinav Sharma |
