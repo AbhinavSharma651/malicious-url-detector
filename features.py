@@ -4,6 +4,11 @@ This module is shared by train.py (offline) and app.py (online) so the model
 sees exactly the same feature definitions in both places. The definitions were
 reverse-checked against the StandardScaler saved from the Kaggle run: the mean
 and std of every feature computed here match the scaler's mean_/scale_.
+
+SCHEME FIX: the Kaggle dataset leaks the label through the URL scheme (92% of benign
+URLs have no http(s):// while all defacement and most malware URLs do). The scheme is
+therefore stripped before any feature is computed, so the model judges the host and
+path, not whether someone pasted "https://".
 """
 from __future__ import annotations
 
@@ -45,7 +50,7 @@ FEATURE_SPECS = [
     ("letter_ratio", "float", 0.0, 1.0, "Share of letters in the URL"),
     ("has_ip", "int", 0, 1, "Raw IP address instead of a domain name"),
     ("num_subdomains", "int", 0, MAX_URL_LEN, "Deep subdomain chains imitate trusted brands"),
-    ("uses_https_token", "int", 0, 1, "'https' text inside an http:// URL (fake security cue)"),
+    ("uses_https_token", "int", 0, 1, "'https' text inside the host/path (fake security cue, e.g. https-paypal.com)"),
     ("has_at_symbol", "int", 0, 1, "Presence of '@' in the URL"),
     ("has_double_slash_redirect", "int", 0, 1, "'//' after the scheme signals a redirect"),
     ("is_shortened", "int", 0, 1, "URL shortener hides the destination"),
@@ -87,9 +92,31 @@ def _entropy(text: str) -> float:
     return -sum(c / n * math.log2(c / n) for c in Counter(text).values())
 
 
+_SCHEME_RE = re.compile(r"^\s*[a-zA-Z][a-zA-Z0-9+.-]*://")
+
+
+def normalize_url(url: str) -> str:
+    """Canonical form used for every feature.
+
+    1. Strip the scheme: the dataset leaks the label through http(s)://.
+    2. Give a bare host a trailing '/': 'google.com' and 'google.com/' are the same URL,
+       but in the dataset 94% of path-less URLs are phishing and only 0.1% are benign,
+       so without this the model flags every homepage.
+    """
+    url = _SCHEME_RE.sub("", url.strip(), count=1)
+    if "/" not in url and "?" not in url and "#" not in url:
+        url += "/"
+    return url
+
+
 def extract_features(url: str) -> dict:
-    """Return the 33 features for one URL as {name: number}."""
-    full = url if "//" in url else "http://" + url
+    """Return the 33 features for one URL as {name: number}.
+
+    The scheme is stripped first (see module docstring), so 'https://github.com/x'
+    and 'github.com/x' produce identical features, and 'google.com' equals 'google.com/'.
+    """
+    url = normalize_url(url)
+    full = "http://" + url  # urlparse needs a scheme to find the host
     try:
         parsed = urlparse(full)
         host, path, hostname = parsed.netloc or "", parsed.path or "", parsed.hostname
@@ -115,9 +142,9 @@ def extract_features(url: str) -> dict:
         letter_ratio=letters / n,
         has_ip=int(bool(_IP_RE.search(host))),
         num_subdomains=max(host.count(".") - 1, 0),
-        uses_https_token=int(lowered.startswith("http://") and "https" in lowered[7:]),
+        uses_https_token=int("https" in lowered),
         has_at_symbol=int("@" in url),
-        has_double_slash_redirect=int(url.rfind("//") > 7),
+        has_double_slash_redirect=int("//" in url),
         is_shortened=int(bool(_SHORT_RE.search(url))),
         num_suspicious_words=sum(w in lowered for w in SUSPICIOUS_WORDS),
         entropy=_entropy(url),
