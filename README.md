@@ -1,32 +1,78 @@
 # Malicious URL Detector
 
-**CSL236 End-Term Project** — production-style machine-learning system with tracked experiments, validated API, tests, Docker, CI, deployment and monitoring.
+**CSL236 End-Term Project** — an end-to-end machine-learning application that classifies URLs into benign, defacement, malware, and phishing categories. The project includes dataset preparation, lexical feature engineering, model comparison, MLflow experiment tracking, a validated FastAPI service, a web interface, automated tests, Docker packaging, GitHub Actions CI, cloud deployment, prediction logging, and drift monitoring.
+
+<p align="center">
+  <a href="https://malicious-url-detector-lmac.onrender.com/"><strong>Live Application</strong></a> ·
+  <a href="https://malicious-url-detector-lmac.onrender.com/docs"><strong>Interactive API Docs</strong></a> ·
+  <a href="https://malicious-url-detector-lmac.onrender.com/health"><strong>Health Check</strong></a>
+</p>
+
+> **Important:** This is an educational URL-string classification project. It does not visit or inspect the destination website, and its predictions are not a guarantee that a URL is safe or malicious. Do not use it as the only security control.
+
+---
 
 ## 1. Project overview
 
 | Item | Description |
 |---|---|
 | Project | Malicious URL Detector |
-| Problem | Classify a URL as benign, defacement, malware or phishing |
-| Input | URL text only |
-| Features | 33 lexical URL features |
-| Classes | `benign`, `defacement`, `malware`, `phishing` |
-| Output | Predicted class, class probabilities, `P(malicious) = 1 - P(benign)`, risk level and rule-based safety tips |
-| Network behaviour | No page download and no network calls during feature extraction/prediction |
+| Course | CSL236 End-Term Project |
+| Problem type | Multi-class URL classification |
+| Input | URL text |
+| Engineered features | 33 lexical URL features |
+| Output classes | `benign`, `defacement`, `malware`, `phishing` |
+| Model serving | FastAPI |
+| User interface | HTML/CSS/JavaScript web interface |
+| Experiment tracking | MLflow |
+| Testing | pytest |
+| Packaging | Docker (`python:3.11-slim`) |
+| CI | GitHub Actions |
+| Deployment | Render |
+| Monitoring | JSONL prediction logging and feature-drift checks |
 
-## 2. Dataset
+### Live deployment
+
+| Resource | URL |
+|---|---|
+| Web application | https://malicious-url-detector-lmac.onrender.com/ |
+| API health endpoint | https://malicious-url-detector-lmac.onrender.com/health |
+| Swagger / OpenAPI documentation | https://malicious-url-detector-lmac.onrender.com/docs |
+| OpenAPI JSON schema | https://malicious-url-detector-lmac.onrender.com/openapi.json |
+
+The deployed `/health` endpoint has returned `status: ok` and reported the loaded model, four classes, and 33 input features. The Swagger documentation page is also accessible on the live deployment.
+
+## 2. Problem statement and objectives
+
+Malicious URLs are commonly used in phishing, malware distribution, and website defacement campaigns. This project uses machine learning to identify URL patterns that may indicate these categories.
+
+The main objectives are:
+
+1. Prepare and inspect a labelled URL dataset.
+2. Convert raw URL strings into numeric lexical features.
+3. Compare multiple machine-learning algorithms using consistent evaluation metrics.
+4. Track model experiments and parameters with MLflow.
+5. Serialize and load the selected model for inference.
+6. Expose predictions through a REST API with strict request validation.
+7. Provide a simple web interface and practical safety tips.
+8. Package the service in Docker and automate checks with GitHub Actions.
+9. Deploy the application and record prediction information for monitoring.
+10. Monitor changes in incoming feature distributions.
+
+## 3. Dataset
 
 | Item | Value |
 |---|---|
-| Source | [Kaggle — Malicious URLs dataset](https://www.kaggle.com/datasets/sid321axn/malicious-urls-dataset) by sid321axn |
+| Dataset source | [Kaggle — Malicious URLs Dataset](https://www.kaggle.com/datasets/sid321axn/malicious-urls-dataset) |
+| Dataset publisher | `sid321axn` |
 | Original rows | 651,191 |
 | Rows after URL de-duplication | 641,119 |
-| Target column | `type` |
 | Input column | `url` |
+| Target column | `type` |
+| Classes | benign, defacement, phishing, malware |
 | Train/test split | 70% / 30%, stratified |
 | Random state | `42` |
 | Scaling | Scaler fitted on the training split only |
-| Feature consistency | `features.py` is shared by training and serving |
 
 ### Class distribution after de-duplication
 
@@ -38,142 +84,113 @@
 | malware | 23,645 |
 | **Total** | **641,119** |
 
-## 3. Data contract and URL features
+The dataset is imbalanced. For this reason, the project reports macro-F1 and per-class precision, recall, and F1-score in addition to accuracy.
 
-The user supplies a URL through `POST /predict` (4–2048 characters, with no spaces or control characters). The server derives the 33 features listed below.
+## 4. Feature engineering and data contract
 
-`POST /predict/features` accepts the same 33 features directly. Every feature specification is enforced by the Pydantic schema (`features.FEATURE_SPECS` → `app.FeaturesRequest`). Wrong types, out-of-range values, missing fields, null, NaN or unknown fields return **HTTP 422**.
+The application extracts 33 lexical features from the URL string. It does not download the target page or make network requests to the submitted URL during feature extraction or prediction.
 
-| Validation rule | Requirement |
-|---|---|
-| Strict integer fields | A string such as `"60"` or a float such as `60.5` is not accepted for an `int` field |
-| Digit and letter counts | `count_digits + count_letters <= url_length` |
-| Hostname length | `hostname_length <= url_length` |
-| Path length | `path_length <= url_length` |
-| Ratios | `digit_ratio + letter_ratio <= 1` |
+| # | Feature | Type | Purpose |
+|---:|---|---|---|
+| 1 | `url_length` | Integer | Total URL length |
+| 2 | `hostname_length` | Integer | Hostname length |
+| 3 | `path_length` | Integer | Path length |
+| 4 | `count_dot` | Integer | Number of dots |
+| 5 | `count_hyphen` | Integer | Number of hyphens |
+| 6 | `count_underscore` | Integer | Number of underscores |
+| 7 | `count_slash` | Integer | Number of slashes |
+| 8 | `count_question` | Integer | Number of question marks |
+| 9 | `count_equals` | Integer | Number of equals signs |
+| 10 | `count_at` | Integer | Number of `@` symbols |
+| 11 | `count_and` | Integer | Number of ampersands |
+| 12 | `count_percent` | Integer | Number of percent signs |
+| 13 | `count_hash` | Integer | Number of hash symbols |
+| 14 | `count_excl` | Integer | Number of exclamation marks |
+| 15 | `count_tilde` | Integer | Number of tildes |
+| 16 | `count_comma` | Integer | Number of commas |
+| 17 | `count_plus` | Integer | Number of plus signs |
+| 18 | `count_star` | Integer | Number of asterisks |
+| 19 | `count_colon` | Integer | Number of colons |
+| 20 | `count_digits` | Integer | Number of numeric characters |
+| 21 | `count_letters` | Integer | Number of alphabetic characters |
+| 22 | `digit_ratio` | Float | Proportion of digits |
+| 23 | `letter_ratio` | Float | Proportion of letters |
+| 24 | `has_ip` | Integer (0/1) | Whether the host is an IP address |
+| 25 | `num_subdomains` | Integer | Number of subdomains |
+| 26 | `uses_https_token` | Integer (0/1) | HTTPS token indicator |
+| 27 | `has_at_symbol` | Integer (0/1) | Whether the URL contains `@` |
+| 28 | `has_double_slash_redirect` | Integer (0/1) | Double-slash redirect indicator |
+| 29 | `is_shortened` | Integer (0/1) | Known URL-shortener indicator |
+| 30 | `num_suspicious_words` | Integer | Count of configured suspicious terms |
+| 31 | `entropy` | Float | Shannon entropy of URL characters |
+| 32 | `tld_length` | Integer | Top-level-domain length |
+| 33 | `abnormal_url` | Integer (0/1) | Abnormal URL structure indicator |
 
-### Feature specification
+The `type` column is the prediction target; it is not included as an input feature.
 
-| # | Feature | Type | Allowed range / values | Why it matters |
-|---:|---|---|---|---|
-| 1 | `url_length` | int | 1–2048 | Phishing URLs tend to be long, to hide the real domain |
-| 2 | `hostname_length` | int | 0–2048 | Very long hostnames often imitate brands |
-| 3 | `path_length` | int | 0–2048 | Long paths carry payload names and redirect chains |
-| 4 | `count_dot` | int | 0–2048 | Many dots mean many (sub)domains |
-| 5 | `count_hyphen` | int | 0–2048 | Hyphens are common in look-alike domains |
-| 6 | `count_underscore` | int | 0–2048 | Underscores appear in generated/defaced paths |
-| 7 | `count_slash` | int | 0–2048 | Directory depth of the URL |
-| 8 | `count_question` | int | 0–2048 | Query string present (tracking / injected params) |
-| 9 | `count_equals` | int | 0–2048 | Number of query parameters |
-| 10 | `count_at` | int | 0–2048 | `@` can hide the real destination |
-| 11 | `count_and` | int | 0–2048 | Number of chained query parameters |
-| 12 | `count_percent` | int | 0–2048 | Percent-encoding can obfuscate content |
-| 13 | `count_hash` | int | 0–2048 | Fragment markers |
-| 14 | `count_excl` | int | 0–2048 | Rare `!` character |
-| 15 | `count_tilde` | int | 0–2048 | Home-directory paths, often compromised hosts |
-| 16 | `count_comma` | int | 0–2048 | Rare `,` character |
-| 17 | `count_plus` | int | 0–2048 | Encoded spaces / obfuscation |
-| 18 | `count_star` | int | 0–2048 | Rare `*` character |
-| 19 | `count_colon` | int | 0–2048 | Scheme and port separators |
-| 20 | `count_digits` | int | 0–2048 | Digit-heavy URLs are often auto-generated |
-| 21 | `count_letters` | int | 0–2048 | Readable content in the URL |
-| 22 | `digit_ratio` | float | 0.0–1.0 | Share of digits in the URL |
-| 23 | `letter_ratio` | float | 0.0–1.0 | Share of letters in the URL |
-| 24 | `has_ip` | int | {0, 1} | Raw IP address instead of a domain name |
-| 25 | `num_subdomains` | int | 0–2048 | Deep subdomain chains imitate trusted brands |
-| 26 | `uses_https_token` | int | {0, 1} | `https` text inside an `http://` URL (fake security cue) |
-| 27 | `has_at_symbol` | int | {0, 1} | Presence of `@` in the URL |
-| 28 | `has_double_slash_redirect` | int | {0, 1} | `//` after the scheme signals a redirect |
-| 29 | `is_shortened` | int | {0, 1} | URL shortener hides the destination |
-| 30 | `num_suspicious_words` | int | 0–15 | Words like login/verify/secure used in lures |
-| 31 | `entropy` | float | 0.0–8.0 | Random-looking strings have high Shannon entropy |
-| 32 | `tld_length` | int | 0–63 | Unusual top-level domains |
-| 33 | `abnormal_url` | int | {0, 1} | Hostname is not present in the URL as written |
-| — | `type` (target) | category | benign, defacement, malware, phishing | Label; this is the prediction target, not an input feature |
+### API validation contract
 
-## 4. Repository layout
+`POST /predict` accepts a URL string between 4 and 2,048 characters. Spaces and control characters are rejected. `POST /predict/features` accepts all 33 engineered features. The Pydantic schema is generated from the shared feature specifications in `features.py`.
 
-| Path | Purpose |
-|---|---|
-| `data/malicious_phish.csv` | Dataset |
-| `data/README.md` | Dataset notes |
-| `model/model.joblib` | Best model bundle: model, scaler, label encoder, feature list and training statistics |
-| `static/index.html` | Web UI |
-| `tests/test_app.py` | Pytest suite |
-| `.github/workflows/ci.yml` | GitHub Actions workflow |
-| `app.py` | FastAPI app, Pydantic schemas and prediction logging |
-| `features.py` | URL-to-33-feature extraction, data contract and rule-based tips |
-| `train.py` | Training script with MLflow tracking and CLI hyperparameters |
-| `check_drift.py` | Drift check on logged inputs |
-| `scripts/build_bundle_from_kaggle.py` | Builds a model bundle from the Kaggle-trained model |
-| `scripts/export_mlflow_results.py` | Exports MLflow results |
-| `Dockerfile` | Docker image definition |
-| `requirements.txt` | Project/training dependencies |
-| `requirements-serve.txt` | Serving dependencies |
-| `.gitignore` | Git ignore rules |
+The API rejects invalid requests with HTTP `422 Unprocessable Entity`, including missing required fields, unexpected extra fields, incorrect data types, out-of-range values, `NaN` or infinite floating-point values, and inconsistent feature combinations. This ensures model inference receives data that follows the training feature contract.
 
-## 5. Setup and run locally
+## 5. Machine-learning workflow
 
-### Environment setup
+1. Load and inspect the labelled dataset.
+2. Remove duplicate URLs.
+3. Extract the 33 lexical features.
+4. Split the dataset into stratified training and test sets.
+5. Fit the scaler using training data only.
+6. Train and compare multiple algorithms.
+7. Evaluate using accuracy, precision, recall, macro-F1, and weighted-F1.
+8. Track experiment parameters and metrics in MLflow.
+9. Serialize the selected model, scaler, label encoder, and feature-column metadata.
+10. Load the saved model bundle in the FastAPI application.
 
-| Step | Windows PowerShell | macOS / Linux |
-|---|---|---|
-| Create virtual environment | `python -m venv venv` | `python3 -m venv venv` |
-| Activate environment | `.\venv\Scripts\Activate.ps1` | `source venv/bin/activate` |
-| Install dependencies | `pip install -r requirements.txt` | `pip install -r requirements.txt` |
+### Algorithms evaluated
 
-### Training commands
+- Logistic Regression
+- Random Forest
+- XGBoost
 
-Each training run is logged to MLflow.
+### MLflow experiment tracking
 
-| Experiment | Command |
-|---|---|
-| Logistic regression baseline | `python train.py --algorithm logistic_regression --C 1.0` |
-| Random forest configuration | `python train.py --algorithm random_forest --n_estimators 200 --max_depth 20` |
-| XGBoost configuration | `python train.py --algorithm xgboost --n_estimators 200 --max_depth 6 --learning_rate 0.1` |
-| Larger XGBoost configuration | `python train.py --algorithm xgboost --n_estimators 400 --max_depth 8 --learning_rate 0.1` |
-| Random forest, 20k sample | `python train.py --algorithm random_forest --sample 20000 --run_name RF_Test` |
-| Random forest, 80k sample | `python train.py --algorithm random_forest --sample 80000 --run_name Random_Forest_Experiment` |
-| Logistic regression, 80k sample | `python train.py --algorithm logistic_regression --sample 80000 --run_name Logistic_Regression_Experiment` |
-| XGBoost, 80k sample | `python train.py --algorithm xgboost --sample 80000 --run_name XGBoost_Experiment` |
-| Final full-dataset XGBoost | `python train.py --algorithm xgboost --force --run_name Final_Model_Full_Dataset` |
+Training runs are recorded in MLflow. Tracked information includes the algorithm, training parameters, and evaluation metrics. The project includes multiple runs for model comparison.
 
-### Start the tools and application
+Start the local MLflow interface:
 
-| Purpose | Command | Default address / notes |
-|---|---|---|
-| MLflow UI | `mlflow ui --backend-store-uri sqlite:///mlflow.db` | `http://127.0.0.1:5000` |
-| FastAPI server | `uvicorn app:app --reload --port 8000` | `http://127.0.0.1:8000` |
-| API documentation | Open `/docs` while the server is running | `http://127.0.0.1:8000/docs` |
-| Run tests | `pytest -v --tb=short` | Displays test results in the terminal |
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
 
-### Training behaviour and model bundle
+Then open `http://127.0.0.1:5000`.
 
-| Item | Behaviour |
-|---|---|
-| Model replacement | `train.py` only overwrites `model/model.joblib` when a run beats the best macro-F1 so far |
-| Best-score record | `model/best_metrics.json` |
-| Force replacement | Add `--force` to override the best-score guard |
-| Feature cache | `data/.features_cache.joblib` |
-| Cache tracking | The feature cache is git-ignored |
-| Full feature build | The first full run builds features for all 641k URLs; this takes about a minute |
+### Reproducible training examples
 
-### Training experiments and results
+Run from the project root after installing development requirements:
 
-The sample experiments below are the results shown in the recorded terminal runs. The 20k and 80k sample experiments use an 80/20 train/test split of the selected sample. The final run uses the full 641,119-row de-duplicated dataset and the documented 70/30 stratified split. Metrics are reported as shown by the training script.
+```bash
+python train.py --algorithm logistic_regression --sample 80000 --run_name Logistic_Regression_Experiment
+python train.py --algorithm random_forest --sample 80000 --run_name Random_Forest_Experiment
+python train.py --algorithm xgboost --sample 80000 --run_name XGBoost_Experiment
+python train.py --algorithm xgboost --force --run_name Final_Model_Full_Dataset
+```
 
-| Run | Algorithm | Rows used | Accuracy | Macro-F1 | Weighted-F1 | Malicious recall | Benign false-alarm rate | Fit time |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| `Random_Forest_Experiment` | Random Forest | 80,000 | 0.8069 | 0.6945 | 0.7825 | — | — | 1.3 s |
-| `Logistic_Regression_Experiment` | Logistic Regression | 80,000 | 0.7659 | 0.6114 | 0.7286 | 0.4378 | 0.0525 | 1.2 s |
-| `XGBoost_Experiment` | XGBoost | 80,000 | 0.8630 | 0.8201 | 0.8586 | 0.7521 | 0.0617 | 4.9 s |
-| `Final_Model_Full_Dataset` | XGBoost | 641,119 | 0.8801 | 0.8452 | 0.8759 | 0.7738 | 0.0510 | 21.5 s |
+The final command uses the full de-duplicated dataset according to the training script's configured split and saves the selected model bundle.
 
-**Selected model:** XGBoost trained on the full de-duplicated dataset. It achieved the highest macro-F1 among the displayed experiments (0.8452). The final run was explicitly forced with `--force`.
+## 6. Model evaluation and results
 
-### Final model: per-class test performance
+The final model reported by the project is XGBoost trained on the de-duplicated dataset.
 
-| Class / metric | Precision | Recall | F1-score | Support |
+| Metric | Result |
+|---|---:|
+| Accuracy | 0.8801 (88.01%) |
+| Macro-F1 | 0.8452 |
+| Weighted-F1 | 0.8759 |
+
+### Per-class performance
+
+| Class | Precision | Recall | F1-score | Support |
 |---|---:|---:|---:|---:|
 | benign | 0.8940 | 0.9490 | 0.9207 | 128,424 |
 | defacement | 0.8970 | 0.8599 | 0.8781 | 28,592 |
@@ -183,128 +200,319 @@ The sample experiments below are the results shown in the recorded terminal runs
 | **Macro average** | **0.8799** | **0.8175** | **0.8452** | **192,336** |
 | **Weighted average** | **0.8759** | **0.8801** | **0.8759** | **192,336** |
 
-Phishing remains the weakest class by F1-score (0.6581). Overall accuracy should therefore not be interpreted as equally strong performance across all classes.
+The model achieves 88.01% accuracy and macro-F1 of 0.8452 on the reported test set. Phishing has the lowest F1-score (0.6581), indicating that this class is more difficult for the current feature set and model to classify reliably. Accuracy alone does not describe performance across imbalanced classes; macro-F1 and per-class results are also important.
 
-### Use a model trained on Kaggle instead of retraining
+## 7. Application architecture
 
-| Purpose | Command / detail |
-|---|---|
-| Build the bundle | `python scripts/build_bundle_from_kaggle.py --src <folder> --macro_f1 <value>` |
-| scikit-learn version used to write the pickles | 1.6.1 |
-| Local dependency | `requirements.txt` pins scikit-learn 1.6.1 |
-| XGBoost compatibility | Check `xgboost.__version__` on Kaggle and pin the same major/minor version of `xgboost-cpu` locally if loading fails |
+```text
+User
+ |
+ v
+Web interface (GET /)
+ |
+ v
+FastAPI application
+ |
+ +--> Pydantic request validation
+ |
+ +--> URL feature extraction (33 features)
+ |
+ +--> Saved model bundle (scaler, classifier, label encoder, feature metadata)
+ |
+ +--> Prediction response (class, probabilities, risk level, safety tips)
+ |
+ +--> Prediction log (JSONL)
+          |
+          v
+      Drift-check script
+```
 
-## 6. Docker
+The model bundle is loaded once when the application starts rather than being loaded for every prediction request.
 
-| Step | Command / detail |
-|---|---|
-| Build image | `docker build -t malicious-url-detector .` |
-| Run container | `docker run -d -p 8000:8000 --restart unless-stopped -v mud-logs:/app/logs malicious-url-detector` |
-| Base image | `python:3.11-slim` |
-| Dependencies in image | `requirements-serve.txt` only |
-| Excluded from serving image | MLflow, pytest and pandas |
-| Image size | Run `docker images` after building and record the displayed size |
+## 8. API documentation and endpoints
 
-## 7. API
-
-| Method | Route | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | UI: prediction, probability bars and 2–3 rule-based tips |
-| GET | `/health` | Liveness and model information |
-| POST | `/predict` | Accepts a URL and returns verdict, probabilities and tips |
-| POST | `/predict/features` | Accepts the 33 features and returns a verdict; strict data contract applies |
-| GET | `/docs` | OpenAPI interactive documentation |
+| GET | `/` | Web interface |
+| GET | `/health` | Application and model health information |
+| POST | `/predict` | Predict a class from a URL |
+| POST | `/predict/features` | Predict from the 33 engineered features |
+| GET | `/docs` | Interactive Swagger / OpenAPI documentation |
+| GET | `/openapi.json` | OpenAPI schema |
 
-### API examples
+### Example prediction request
 
-**Predict from a URL**
+```json
+{
+  "url": "github.com/torvalds/linux"
+}
+```
+
+### Call the live API
 
 ```bash
-curl -X POST localhost:8000/predict \
+curl -X POST "https://malicious-url-detector-lmac.onrender.com/predict" \
   -H "Content-Type: application/json" \
   -d '{"url":"github.com/torvalds/linux"}'
 ```
 
-**Invalid URL example — expected HTTP 422**
+### Example response structure
 
-```bash
-curl -i -X POST localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"url":""}'
+The following is an illustrative response structure, not a guaranteed prediction for the example URL:
+
+```json
+{
+  "predicted_class": "benign",
+  "is_malicious": false,
+  "malicious_probability": 0.15,
+  "risk_level": "low",
+  "probabilities": {
+    "benign": 0.85,
+    "defacement": 0.02,
+    "malware": 0.05,
+    "phishing": 0.08
+  },
+  "tips": []
+}
 ```
 
-## 8. Tests and continuous integration
+Requests that violate the API contract are rejected with HTTP `422 Unprocessable Entity`. For example, an empty URL is invalid:
 
-### Test coverage
+```json
+{
+  "url": ""
+}
+```
 
-`pytest -v --tb=short` runs 30+ checks.
+## 9. Web interface
 
-| Test area | What is checked |
+The home page allows a user to enter or paste a URL, submit it for classification, view the predicted category, review the malicious probability and class probabilities, and see a risk level with safety tips. It is an accessible demonstration of the API, not a browser reputation service or a guarantee of website safety.
+
+## 10. Installation and local execution
+
+### Requirements
+
+- Python 3.11
+- Git
+- pip
+- Docker (for container execution)
+- Project files and trained model bundle
+
+### Clone the repository
+
+```bash
+git clone https://github.com/AbhinavSharma651/malicious-url-detector.git
+cd malicious-url-detector
+```
+
+### Create a virtual environment
+
+**Windows PowerShell**
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+**macOS / Linux**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### Install dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If you only need to run the serving application and the repository provides a separate serving dependency file, use:
+
+```bash
+pip install -r requirements-serve.txt
+```
+
+### Start FastAPI
+
+```bash
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+Open the local web UI at `http://127.0.0.1:8000/`, health endpoint at `http://127.0.0.1:8000/health`, and API documentation at `http://127.0.0.1:8000/docs`.
+
+## 11. Testing
+
+Run the test suite from the repository root:
+
+```bash
+pytest -v --tb=short
+```
+
+The test suite covers the health endpoint, web UI, prediction response schema, URL boundary validation, feature validation, feature extraction, prediction logging, and comparative classification behaviour for selected examples. The project guideline requires at least four pytest tests; run the command above and record the actual test count and pass/fail result in the final submission evidence.
+
+## 12. Docker containerization
+
+The application is packaged with a Python 3.11 slim base image. The serving image installs the dependencies needed for inference rather than the full model-training and testing toolchain.
+
+### Build
+
+```bash
+docker build -t malicious-url-detector .
+```
+
+### Run
+
+```bash
+docker run -d \
+  --name malicious-url-detector \
+  -p 8000:8000 \
+  -e PORT=8000 \
+  -v mud-logs:/app/logs \
+  malicious-url-detector
+```
+
+### Verify
+
+```bash
+docker ps
+curl http://localhost:8000/health
+```
+
+Test a prediction:
+
+```bash
+curl -X POST "http://localhost:8000/predict" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"github.com/torvalds/linux"}'
+```
+
+Check the built image size:
+
+```bash
+docker images malicious-url-detector
+```
+
+Record the actual image size displayed by Docker in the final report; it can change with dependency and build updates.
+
+## 13. Continuous integration with GitHub Actions
+
+Workflow file: `.github/workflows/ci.yml`.
+
+The workflow runs on pushes to `main` and includes Python environment setup, dependency installation, baseline model training, pytest execution, Docker image build, and a container smoke test.
+
+The latest workflow run shown during project verification completed successfully, including Docker image build and container smoke-test steps. The smoke-test log showed a successful health response and successful prediction response; an invalid prediction request was also rejected with HTTP 422 as expected.
+
+**Evidence to retain:** capture the green GitHub Actions workflow summary and expanded test, Docker build, and container smoke-test steps.
+
+## 14. Cloud deployment
+
+The FastAPI application is deployed on Render.
+
+| Deployment item | Value |
 |---|---|
-| Health endpoint | Health response and model information |
-| UI | Main web UI route |
-| Response schema | Prediction response structure |
-| Domain-logic test | A phishing-style URL with an IP host, login words and `http` must score a higher `P(malicious)` than `wikipedia.org/wiki/Machine_learning` |
-| URL boundaries | Empty, too short, too long and whitespace-containing URLs return HTTP 422 |
-| Type validation | Wrong types are rejected |
-| Feature validation | Unknown fields, out-of-range features, NaN and null return HTTP 422 |
-| Prediction logging | Successful predictions are logged |
-| Feature extraction | Unit tests for URL feature extraction |
+| Hosting platform | Render |
+| Public application URL | https://malicious-url-detector-lmac.onrender.com/ |
+| Health endpoint | https://malicious-url-detector-lmac.onrender.com/health |
+| API documentation | https://malicious-url-detector-lmac.onrender.com/docs |
+| Configured application port | `8000` |
+| Framework | FastAPI |
+| Container build | Docker |
 
-### GitHub Actions CI pipeline
+### Deployment verification
 
-Workflow file: `.github/workflows/ci.yml`
+The following checks have been observed during deployment verification:
 
-| Trigger | Pipeline steps |
-|---|---|
-| Every push to `main` | Install dependencies → train baseline (random forest on an 80k sample) → run pytest → build Docker image → container smoke test |
+- `/health` returned `status: ok`.
+- `/docs` loaded and displayed the API routes and request schemas.
+- The Docker smoke test started the container and received a successful health response.
+- The smoke test received HTTP 200 for a valid `/predict` request.
+- The smoke test received HTTP 422 for an invalid request.
 
-## 9. Deployment and monitoring
+Free hosting services may temporarily sleep when idle, so the first request after inactivity can take longer to respond.
 
-### Deployment
+## 15. Prediction logging and drift monitoring
 
-| Item | Detail |
-|---|---|
-| Suggested platforms | Render, Railway or an EC2 t3.micro |
-| Container restart policy | `--restart unless-stopped` |
-| Prediction log path | `logs/predictions.jsonl` |
-| Docker log persistence | Mount `/app/logs` as a volume |
+### Prediction logging
 
-### Prediction log contents
+The API appends prediction records to `logs/predictions.jsonl`. Each record includes a UTC timestamp, endpoint, submitted URL where applicable, extracted feature values, predicted class, and malicious probability. Logging is designed not to interrupt a prediction response if writing to the log fails.
 
-Each successful prediction is appended to `logs/predictions.jsonl`.
-
-| Logged field | Description |
-|---|---|
-| `timestamp` | Time of prediction |
-| `URL` | Submitted URL |
-| Features | 33 extracted URL features |
-| Predicted class | Model's predicted class |
-| `P(malicious)` | Predicted probability of a URL being malicious |
+**Privacy note:** URLs can contain personal or sensitive query parameters. Protect access to prediction logs, avoid sharing real user URLs in public screenshots, and apply suitable retention limits before using the application with real users.
 
 ### Drift monitoring
 
-| Item | Detail |
+The project includes `check_drift.py`, which compares the distribution of logged input features with training statistics saved in the model bundle.
+
+```bash
+python check_drift.py
+```
+
+A drift warning indicates that incoming URL feature distributions may differ from the training data. Drift is a signal to investigate; it does not by itself prove that model accuracy has decreased. Where labelled feedback is available, evaluate the model on recent labelled data before deciding whether retraining is necessary.
+
+## 16. Limitations and future improvements
+
+### Current limitations
+
+1. **Lexical-only analysis:** The model uses URL-string features and does not inspect page content, DNS records, WHOIS information, or live threat-intelligence feeds.
+2. **Dataset imbalance:** The four classes do not have equal representation.
+3. **Phishing performance:** The reported phishing F1-score is 0.6581, lower than the other class F1-scores.
+4. **Dataset bias:** Patterns in the training dataset may not represent all current URLs or future attacker behaviour.
+5. **No safety guarantee:** A benign prediction does not prove a site is safe, and a malicious prediction may be a false positive.
+6. **Concept drift:** URL patterns can change over time, so performance may degrade after deployment.
+7. **No page fetching:** A compromised legitimate website may have a benign-looking URL and cannot reliably be detected using URL text alone.
+
+### Future improvements
+
+- Add more recent and diverse labelled URL samples.
+- Improve phishing recall while controlling false positives.
+- Evaluate class-weighting and resampling approaches.
+- Calibrate probability estimates and review risk thresholds.
+- Add explainability for influential features.
+- Add scheduled monitoring and model-performance evaluation on labelled feedback.
+- Improve automated deployment and model-version tracking.
+- Add stronger privacy controls and retention policies for prediction logs.
+
+## 17. Repository structure
+
+| Path | Purpose |
 |---|---|
-| Script | `python check_drift.py` |
-| Comparison | Mean and standard deviation of logged features against training statistics saved in the model bundle |
-| Drift signal | Exits with code 1 if drift is flagged |
-| Suggested response | Retrain when drift is flagged, or when labelled feedback shows macro-F1 has dropped |
+| `app.py` | FastAPI application, request schemas, predictions, and logging |
+| `features.py` | Feature extraction, feature specifications, and safety tips |
+| `train.py` | Model training and MLflow experiment tracking |
+| `check_drift.py` | Feature-drift check |
+| `model/model.joblib` | Serialized model bundle |
+| `model/best_metrics.json` | Best model metrics |
+| `data/malicious_phish.csv` | Dataset (if included in the checkout) |
+| `data/README.md` | Dataset notes |
+| `static/index.html` | Web application interface |
+| `tests/test_app.py` | API and application tests |
+| `scripts/` | Model/data helper scripts |
+| `Dockerfile` | Docker image definition |
+| `requirements.txt` | Project and training dependencies |
+| `requirements-serve.txt` | Serving dependencies |
+| `.github/workflows/ci.yml` | GitHub Actions CI workflow |
 
-## 10. Limitations
+## 18. Team details and contribution
 
-| Limitation | Evidence / impact | Implication |
-|---|---|---|
-| Dataset shortcut: URL schemes | 91.7% of benign URLs have no `http(s)://` prefix; 100% of defacement URLs start with `http://`; only 0.5% of benign URLs use `https://` | The model can learn the presence of a scheme as a shortcut. For example, `https://www.google.com/` can score as malicious while `github.com/torvalds/linux` scores benign. The API adds a notice to requests that include a scheme. |
-| Scheme-stripping experiment | In a quick random-forest experiment on a 150k sample, scheme-stripped URLs fixed google.com/wikipedia.org/github.com but reduced accuracy from 93.8% to 87.8% and exposed other shortcuts such as a leading `www.` | Scheme stripping was not a clean fix. Better data, including benign URLs collected with schemes (e.g. Tranco/Common Crawl), is needed. |
-| Lexical features only | No WHOIS age, page content or reputation lists are used | Look-alike domains and short random-looking benign URLs are difficult to classify. |
-| Phishing performance | Final model phishing F1-score is 0.6581 | Phishing is the weakest class; do not use the service as the only safeguard. |
-| Sensitive prediction logs | Logged URLs may contain sensitive information | Protect or rotate the log file in a real deployment. |
 
-## 11. Project members
 
-| # | Name |
-|---:|---|
-| 1 | Abhinav Sharma |
-| 2 | Daksh Yadav |
-| 3 | Sagar Sharma |
+| # | Team member | Roll number | Contribution |
+|---:|---|---|---|
+| 1 | Abhinav Sharma | 24CSU004 | Project integration; machine-learning model training and evaluation; FastAPI implementation and Pydantic validation; Docker packaging, GitHub Actions CI, and Render deployment. |
+| 2 | Daksh Yadav | 24CSU050  | Dataset sourcing, cleaning and exploratory analysis; class-distribution review; support for URL lexical feature engineering and preparation of the model input data. |
+| 3 | Sagar Sharma | 24CSU177 | Web-interface development; API and input-validation testing; documentation and presentation support; prediction-logging and drift-monitoring review. |
+
+## 19. References
+
+1. [Malicious URLs Dataset — Kaggle](https://www.kaggle.com/datasets/sid321axn/malicious-urls-dataset)
+2. [FastAPI documentation](https://fastapi.tiangolo.com/)
+3. [Pydantic documentation](https://docs.pydantic.dev/)
+4. [MLflow documentation](https://mlflow.org/docs/latest/index.html)
+5. [scikit-learn documentation](https://scikit-learn.org/stable/)
+6. [XGBoost documentation](https://xgboost.readthedocs.io/)
+7. [Docker documentation](https://docs.docker.com/)
+8. [GitHub Actions documentation](https://docs.github.com/actions)
+9. [Render documentation](https://render.com/docs)
+
+
