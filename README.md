@@ -2,7 +2,7 @@
 
 CSL236 End-Term Project – production-style ML system (tracked experiments, validated API, tests, Docker, CI, deployment).
 
-**Live URL:** `TODO – add after deployment`  ·  **API docs:** `<live-url>/docs`
+
 
 ## 1. Problem statement
 
@@ -113,19 +113,9 @@ docker run -d -p 8000:8000 --restart unless-stopped -v mud-logs:/app/logs malici
 
 Built from `python:3.11-slim` with `requirements-serve.txt` only (no MLflow, pytest, pandas). **Image size:** `TODO – run docker images`.
 
-## 7. Experiments (MLflow)
 
-Generate this table from your runs with `python scripts/export_mlflow_results.py` and paste it here:
 
-| # | Run | Algorithm | Hyperparameters | Accuracy | Macro-F1 | Weighted-F1 | Malicious recall |
-|---|-----|-----------|-----------------|----------|----------|-------------|------------------|
-| TODO | | | | | | | |
-
-**Chosen model:** `TODO – name it and justify with the table (macro-F1 matters more than accuracy because phishing and malware are the minority classes).`
-
-Metrics: *macro-F1* treats the four classes equally; *malicious recall* is the share of malicious URLs (any non-benign class) that are not called benign.
-
-## 8. API
+## 7. API
 
 | Route | Purpose |
 |---|---|
@@ -140,7 +130,7 @@ curl -X POST localhost:8000/predict -H "Content-Type: application/json" -d '{"ur
 curl -i -X POST localhost:8000/predict -H "Content-Type: application/json" -d '{"url":""}'   # -> 422
 ```
 
-## 9. Tests and CI
+## 8. Tests and CI
 
 `pytest -v --tb=short` runs 30+ checks: health, UI, response schema, the domain-logic test (a phishing-style URL with an IP host, login words and
 `http` must score a higher `P(malicious)` than `wikipedia.org/wiki/Machine_learning`), boundary tests (empty / too short / too long /
@@ -148,14 +138,14 @@ whitespace / wrong type / unknown field / out-of-range features / NaN / null →
 GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main`: install → train a baseline (random forest on an 80 k sample) → pytest →
 docker build → container smoke test.
 
-## 10. Deployment and monitoring
+## 9. Deployment and monitoring
 
 Deploy the Docker image on Render, Railway or an EC2 t3.micro (`--restart unless-stopped`). Every successful prediction is appended to
 `logs/predictions.jsonl` (timestamp, URL, 33 features, predicted class, P(malicious)); in Docker mount `/app/logs` as a volume.
 **Drift check (bonus):** `python check_drift.py` compares the mean/std of the logged features with the training statistics saved in the
 model bundle and exits with code 1 if drift is flagged. Retrain when drift is flagged, or when labelled feedback shows macro-F1 has dropped.
 
-## 11. Limitations 
+## 10. Limitations 
 
 * **Dataset shortcut.** 91.7 % of benign URLs in the dataset have no `http(s)://` prefix, 100 % of defacement URLs start with `http://`, and only 0.5 % of benign
   URLs use `https://`. The model learns this, so a link such as `https://www.google.com/` can score as malicious while `github.com/torvalds/linux` scores benign.
@@ -165,8 +155,10 @@ model bundle and exits with code 1 if drift is flagged. Retrain when drift is fl
 * Phishing is usually the weakest class (check the per-class report in MLflow); do not use the service as the only safeguard.
 * Logged URLs may be sensitive; protect or rotate the log file in a real deployment.
 
-## 12. Member
+## 11. Member
 
 | Name |
 |---|
 | Abhinav Sharma |
+| Daksh Yadav |
+| Sagar Sharma |
