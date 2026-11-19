@@ -5,73 +5,204 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Malicious URL Detector</title>
 <style>
-  :root { --bg:#f5f7fa; --card:#fff; --text:#1d2733; --muted:#5f6b7a; --line:#dde3ea;
-          --ok:#1b8a4b; --warn:#c77700; --bad:#c62828; --accent:#2457d6; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#12161c; --card:#1b212a; --text:#e8edf3; --muted:#9aa7b6; --line:#2d3643;
-            --ok:#4cc783; --warn:#f0a63a; --bad:#ff6b6b; --accent:#7ea2ff; }
+  :root {
+    --bg:#0b1220; --bg2:#101a2e; --panel:#111c31; --panel2:#16233d; --line:#243452; --text:#e7edf7; --muted:#8fa0bb;
+    --benign:#2fc4a0; --defacement:#e8a838; --phishing:#f0506e; --malware:#a276ff; --accent:#5aa2ff;
+    --low:#2fc4a0; --medium:#e8a838; --high:#f0506e;
+    --grid:rgba(120,150,210,.07); --glow:rgba(90,162,255,.18);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
-  * { box-sizing: border-box; }
-  body { margin:0; font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
-  main { max-width:760px; margin:0 auto; padding:32px 16px 64px; }
-  h1 { font-size:1.6rem; margin:0 0 4px; }
-  .sub { color:var(--muted); margin:0 0 24px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
-  label { font-weight:600; display:block; margin-bottom:8px; }
-  .row { display:flex; gap:8px; }
-  input[type=text] { flex:1; min-width:0; padding:12px; font-size:1rem; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
-  button { padding:12px 20px; font-size:1rem; border:0; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; font-weight:600; }
-  button:disabled { opacity:.6; cursor:wait; }
-  .examples { margin-top:12px; font-size:.9rem; color:var(--muted); }
-  .examples button { background:transparent; color:var(--accent); border:1px solid var(--line); padding:4px 10px; font-size:.85rem; margin:4px 6px 0 0; font-weight:500; }
-  .error { color:var(--bad); margin-top:12px; white-space:pre-wrap; }
-  .verdict { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-  .badge { padding:6px 14px; border-radius:999px; color:#fff; font-weight:700; text-transform:uppercase; font-size:.85rem; }
-  .low { background:var(--ok); } .medium { background:var(--warn); } .high { background:var(--bad); }
-  .score { font-size:1.1rem; }
-  .bars { margin:16px 0 0; }
-  .bar { display:grid; grid-template-columns:110px 1fr 56px; gap:8px; align-items:center; margin:6px 0; font-size:.9rem; }
-  .track { height:10px; background:var(--line); border-radius:6px; overflow:hidden; }
-  .fill { height:100%; background:var(--accent); }
-  h2 { font-size:1.05rem; margin:0 0 8px; }
-  ul { margin:0; padding-left:20px; } li { margin:6px 0; }
-  .notice { font-size:.9rem; color:var(--muted); border-left:3px solid var(--warn); padding-left:10px; margin-top:12px; }
-  details { margin-top:8px; } summary { cursor:pointer; color:var(--muted); }
-  table { border-collapse:collapse; width:100%; font-size:.85rem; margin-top:8px; }
-  td { padding:3px 6px; border-bottom:1px solid var(--line); } td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
-  footer { color:var(--muted); font-size:.85rem; margin-top:24px; }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:#f2f5fb; --bg2:#e9eef8; --panel:#ffffff; --panel2:#f5f8fe; --line:#d5deee; --text:#142038; --muted:#58698a;
+      --benign:#0f9d7a; --defacement:#c98310; --phishing:#d62f52; --malware:#7a49e6; --accent:#2563d8;
+      --low:#0f9d7a; --medium:#c98310; --high:#d62f52;
+      --grid:rgba(40,70,130,.06); --glow:rgba(37,99,216,.14);
+    }
+  }
+  * { box-sizing:border-box; }
+  html { background:var(--bg); }
+  body {
+    margin:0; font:16px/1.55 var(--sans); color:var(--text);
+    background:
+      radial-gradient(900px 420px at 50% -120px, var(--glow), transparent 70%),
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/44px 44px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/44px 44px,
+      var(--bg);
+    min-height:100vh;
+  }
+  main { max-width:980px; margin:0 auto; padding:28px 18px 56px; }
   [hidden] { display:none !important; }
+
+  /* top bar */
+  .top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:34px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:-.01em; }
+  .brand svg { width:26px; height:26px; }
+  .status { font:12.5px var(--mono); color:var(--muted); display:flex; align-items:center; gap:8px;
+            border:1px solid var(--line); border-radius:999px; padding:5px 12px; background:var(--panel); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+  .status.on .dot { background:var(--benign); box-shadow:0 0 0 3px color-mix(in srgb, var(--benign) 25%, transparent); }
+  .status.off .dot { background:var(--phishing); }
+
+  /* hero */
+  h1 { font-size:clamp(2rem, 5.2vw, 3.3rem); line-height:1.05; letter-spacing:-.035em; margin:0 0 12px; font-weight:800; max-width:15ch; }
+  .lede { color:var(--muted); max-width:58ch; margin:0 0 26px; font-size:1.05rem; }
+
+  /* scanner */
+  .scanner { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; overflow:hidden; box-shadow:0 20px 50px -30px #000; }
+  .bar { display:flex; gap:10px; align-items:stretch; }
+  .field { flex:1; min-width:0; display:flex; align-items:center; gap:10px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:0 14px; transition:border-color .15s, box-shadow .15s; }
+  .field:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--glow); }
+  .field svg { width:18px; height:18px; flex:none; color:var(--muted); }
+  input[type=text] { flex:1; min-width:0; border:0; outline:0; background:transparent; color:var(--text); font:15px var(--mono); padding:15px 0; }
+  input::placeholder { color:var(--muted); opacity:.7; }
+  #go { border:0; border-radius:10px; padding:0 26px; font:700 1rem var(--sans); color:#fff; background:var(--accent); cursor:pointer; min-width:116px; transition:filter .15s, transform .05s; }
+  #go:hover { filter:brightness(1.1); } #go:active { transform:translateY(1px); }
+  #go:disabled { opacity:.7; cursor:wait; }
+  .sweep { position:absolute; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg, transparent, var(--accent), transparent); transform:translateX(-100%); opacity:0; }
+  .scanner.busy .sweep { opacity:1; animation:sweep 1s linear infinite; }
+  @keyframes sweep { to { transform:translateX(100%); } }
+  .tries { margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.85rem; color:var(--muted); }
+  .chip { font:12.5px var(--mono); color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:999px; padding:5px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:7px; max-width:100%; transition:border-color .15s; }
+  .chip:hover { border-color:var(--accent); }
+  .chip i { width:8px; height:8px; border-radius:50%; background:var(--muted); flex:none; }
+  .chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:240px; }
+  .error { margin-top:14px; color:var(--phishing); font:13.5px var(--mono); white-space:pre-wrap; border-left:3px solid var(--phishing); padding-left:10px; }
+
+  /* result */
+  #result { margin-top:22px; }
+  .grid { display:grid; grid-template-columns:300px 1fr; gap:16px; }
+  @media (max-width:760px) { .grid { grid-template-columns:1fr; } .bar { flex-direction:column; } #go { padding:14px; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; }
+  .panel h2 { font-size:.8rem; font-weight:600; color:var(--muted); letter-spacing:.02em; margin:0 0 14px; }
+
+  .gauge { text-align:center; }
+  .gauge svg { width:100%; max-width:250px; display:block; margin:0 auto; overflow:visible; }
+  .gauge .track { stroke:var(--line); }
+  .gauge .arc { transition:stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1), stroke .3s; }
+  .gauge .pct { font:800 40px var(--sans); fill:var(--text); letter-spacing:-.03em; }
+  .gauge .cap { font:12px var(--sans); fill:var(--muted); }
+  .verdict { margin-top:6px; display:flex; justify-content:center; gap:8px; align-items:center; flex-wrap:wrap; }
+  .badge { padding:6px 16px; border-radius:999px; font-weight:800; font-size:.95rem; color:#fff; text-transform:capitalize; letter-spacing:.01em; }
+  .risk { font:12.5px var(--mono); color:var(--muted); }
+
+  .probs { display:grid; gap:12px; align-content:start; }
+  .prob { display:grid; grid-template-columns:96px 1fr 58px; gap:10px; align-items:center; font-size:.92rem; }
+  .prob b { font-weight:600; text-transform:capitalize; display:flex; align-items:center; gap:8px; }
+  .prob b i { width:10px; height:10px; border-radius:3px; background:var(--c); }
+  .rail { height:12px; border-radius:6px; background:var(--panel2); border:1px solid var(--line); overflow:hidden; }
+  .fill { height:100%; width:0; background:var(--c); border-radius:6px; transition:width .9s cubic-bezier(.2,.8,.2,1); }
+  .prob em { font:13px var(--mono); font-style:normal; text-align:right; color:var(--muted); }
+  .prob.lead em { color:var(--text); font-weight:700; }
+
+  .anatomy { margin-top:16px; }
+  .url { font:15px/1.9 var(--mono); word-break:break-all; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .url .scheme { color:var(--muted); } .url .host { font-weight:700; } .url .path { color:var(--text); } .url .query { color:var(--muted); }
+  .url .bad { background:color-mix(in srgb, var(--phishing) 20%, transparent); color:var(--phishing); border-radius:4px; padding:1px 3px; font-weight:700; }
+  .url .lure { background:color-mix(in srgb, var(--defacement) 22%, transparent); color:var(--defacement); border-radius:4px; padding:1px 3px; font-weight:700; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:10px; font-size:.8rem; color:var(--muted); }
+  .legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--k); }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  @media (max-width:760px) { .two { grid-template-columns:1fr; } }
+  .tips { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+  .tips li { display:grid; grid-template-columns:28px 1fr; gap:10px; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:.93rem; }
+  .tips li svg { width:22px; height:22px; color:var(--accent); }
+  .notice { margin-top:12px; font-size:.85rem; color:var(--muted); border-left:3px solid var(--defacement); padding-left:10px; }
+
+  .flags { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+  .flag { font-size:.82rem; border:1px solid var(--line); border-radius:8px; padding:5px 10px; color:var(--muted); background:var(--panel2); display:flex; gap:7px; align-items:center; }
+  .flag::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--line); }
+  .flag.on { color:var(--text); border-color:color-mix(in srgb, var(--phishing) 55%, var(--line)); }
+  .flag.on::before { background:var(--phishing); }
+  .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  @media (max-width:760px) { .stats { grid-template-columns:repeat(3,1fr); } }
+  .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:9px 8px; text-align:center; }
+  .stat b { display:block; font:700 1.15rem var(--mono); letter-spacing:-.02em; }
+  .stat small { color:var(--muted); font-size:.72rem; }
+  details { margin-top:14px; } summary { cursor:pointer; color:var(--muted); font-size:.85rem; }
+  table { border-collapse:collapse; width:100%; font:12.5px var(--mono); margin-top:8px; }
+  td { padding:4px 6px; border-bottom:1px solid var(--line); } td:last-child { text-align:right; }
+
+  footer { margin-top:30px; color:var(--muted); font-size:.85rem; }
+  footer a { color:var(--accent); }
+  .reveal { animation:rise .45s ease both; }
+  @keyframes rise { from { opacity:0; transform:translateY(8px); } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>Malicious URL Detector</h1>
-  <p class="sub">Paste a link. The model reads the URL text only (never visits it) and scores it as benign, defacement, malware or phishing.</p>
+  <div class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 3l11 4v8c0 7-4.6 12.2-11 14C9.6 27.2 5 22 5 15V7l11-4z" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/><path d="M11 16.5l3.500 3.500L21.500 12" stroke="var(--benign)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      URL Scanner
+    </div>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting to model…</span></div>
+  </div>
 
-  <section class="card">
-    <label for="url">URL to check</label>
-    <div class="row">
-      <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="e.g. github.com/torvalds/linux">
-      <button id="go" type="button">Check</button>
+  <h1>Malicious URL Detector</h1>
+  <p class="lede">Paste a link. The model reads the URL text only (it never visits the page) and scores it as benign, defacement, malware or phishing.</p>
+
+  <section class="scanner" id="scanner">
+    <div class="bar">
+      <label class="field" for="url">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="github.com/torvalds/linux">
+      </label>
+      <button id="go" type="button">Scan</button>
     </div>
-    <div class="examples">Try an example:
-      <button type="button" data-url="github.com/torvalds/linux">bare, normal</button>
-      <button type="button" data-url="http://192.168.0.1/paypal-secure-login/verify/account.php?id=3&amp;update=1">IP + login words</button>
-      <button type="button" data-url="http://bit.ly/3xYz9Qa">shortened link</button>
+    <div class="tries" id="examples">Try an example:
+      <button class="chip" type="button" data-url="github.com/torvalds/linux"><i style="background:var(--benign)"></i><span>bare, normal</span></button>
+      <button class="chip" type="button" data-url="http://192.168.0.1/paypal-secure-login/verify/account.php?id=3&amp;update=1"><i style="background:var(--phishing)"></i><span>IP + login words</span></button>
+      <button class="chip" type="button" data-url="http://bit.ly/3xYz9Qa"><i style="background:var(--defacement)"></i><span>shortened link</span></button>
+      <button class="chip" type="button" data-url="http://secure-account-update.mybank.com.verify-login.xyz/signin?session=8f3a9c"><i style="background:var(--malware)"></i><span>fake bank subdomain</span></button>
     </div>
+    <div class="tries" id="historyRow" hidden>Recent scans:<span id="history" style="display:contents"></span></div>
     <div id="error" class="error" role="alert" hidden></div>
+    <div class="sweep"></div>
   </section>
 
-  <section id="result" class="card" hidden aria-live="polite">
-    <div class="verdict">
-      <span id="badge" class="badge"></span>
-      <span class="score" id="score"></span>
+  <section id="result" hidden aria-live="polite">
+    <div class="grid">
+      <div class="panel gauge">
+        <h2>Malicious probability</h2>
+        <svg viewBox="0 0 220 140" aria-hidden="true">
+          <path class="track" d="M20 115 A90 90 0 0 1 200 115" fill="none" stroke-width="16" stroke-linecap="round"/>
+          <path id="arc" class="arc" d="M20 115 A90 90 0 0 1 200 115" fill="none" stroke-width="16" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+          <text id="pct" class="pct" x="110" y="96" text-anchor="middle">0%</text>
+          <text class="cap" x="110" y="128" text-anchor="middle">P(malicious) = 1 − P(benign)</text>
+        </svg>
+        <div class="verdict"><span id="badge" class="badge"></span><span class="risk" id="risk"></span></div>
+      </div>
+      <div class="panel">
+        <h2>Class probabilities</h2>
+        <div class="probs" id="probs"></div>
+        <div class="anatomy">
+          <h2 style="margin-top:20px">URL anatomy</h2>
+          <div class="url" id="anatomy"></div>
+          <div class="legend">
+            <span style="--k:var(--muted)">scheme / query</span><span style="--k:var(--text)">host and path</span>
+            <span style="--k:var(--phishing)">raw IP, @ or redirect</span><span style="--k:var(--defacement)">lure word</span>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="bars" id="bars"></div>
-    <h2 style="margin-top:20px">What to do</h2>
-    <ul id="tips"></ul>
-    <div id="notice" class="notice" hidden></div>
-    <details><summary>Signals extracted from the URL</summary><table id="features"></table></details>
+
+    <div class="two">
+      <div class="panel">
+        <h2>What to do</h2>
+        <ul class="tips" id="tips"></ul>
+        <div id="notice" class="notice" hidden></div>
+      </div>
+      <div class="panel">
+        <h2>Signals the model saw</h2>
+        <div class="flags" id="flags"></div>
+        <div class="stats" id="stats"></div>
+        <details><summary>All 33 extracted features</summary><table id="features"></table></details>
+      </div>
+    </div>
   </section>
 
   <footer>API docs: <a href="/docs">/docs</a> &middot; This is a lexical model; it can be wrong. Do not rely on it as your only safeguard.</footer>
@@ -79,16 +210,26 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const input = $("url"), button = $("go");
+const COLORS = { benign:"var(--benign)", defacement:"var(--defacement)", phishing:"var(--phishing)", malware:"var(--malware)" };
+const RISK = { low:"var(--low)", medium:"var(--medium)", high:"var(--high)" };
+const LURE = /(login|log-in|signin|sign-in|verify|secure|account|update|confirm|password|banking|bank|paypal|free|bonus|wallet|support|webscr)/ig;
+const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>';
+const input = $("url"), button = $("go"), scanner = $("scanner");
+let history = [];
 
-document.querySelectorAll(".examples button").forEach((b) => {
-  b.addEventListener("click", () => { input.value = b.dataset.url; check(); });
-});
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+/* model status from /health */
+fetch("/health").then((r) => r.json()).then((h) => {
+  $("status").className = "status on";
+  $("statusText").textContent = "model online · " + h.algorithm + " · " + h.n_features + " features";
+}).catch(() => { $("status").className = "status off"; $("statusText").textContent = "model unreachable"; });
+
+document.querySelectorAll("#examples .chip").forEach((b) => b.addEventListener("click", () => { input.value = b.dataset.url; check(); }));
 input.addEventListener("keydown", (e) => { if (e.key === "Enter") check(); });
 button.addEventListener("click", check);
 
 function showError(msg) { $("error").textContent = msg; $("error").hidden = !msg; }
-
 function formatDetail(detail) {
   if (!Array.isArray(detail)) return String(detail);
   return detail.map((d) => (d.loc ? d.loc.slice(1).join(".") + ": " : "") + d.msg).join("\n");
@@ -97,49 +238,102 @@ function formatDetail(detail) {
 async function check() {
   showError("");
   const url = input.value.trim();
-  button.disabled = true; button.textContent = "Checking…";
+  button.disabled = true; button.textContent = "Scanning…"; scanner.classList.add("busy");
   try {
-    const res = await fetch("/predict", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+    const res = await fetch("/predict", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ url }) });
     const data = await res.json();
     if (!res.ok) { $("result").hidden = true; showError("Invalid input (HTTP " + res.status + "):\n" + formatDetail(data.detail)); return; }
-    render(data);
+    render(data, url);
+    remember(url, data);
   } catch (err) {
     $("result").hidden = true; showError("Could not reach the server. Please try again.");
   } finally {
-    button.disabled = false; button.textContent = "Check";
+    button.disabled = false; button.textContent = "Scan"; scanner.classList.remove("busy");
   }
 }
 
-function render(d) {
-  const badge = $("badge");
-  badge.className = "badge " + d.risk_level;
-  badge.textContent = d.is_malicious ? d.predicted_class : "benign";
-  $("score").textContent = "Risk: " + d.risk_level + " · P(malicious) = " + (d.malicious_probability * 100).toFixed(1) + "%";
+function label(d) { return d.is_malicious ? d.predicted_class : "benign"; }
 
-  const bars = $("bars"); bars.replaceChildren();
-  Object.entries(d.probabilities).sort((a, b) => b[1] - a[1]).forEach(([name, p]) => {
-    const row = document.createElement("div"); row.className = "bar";
-    const label = document.createElement("span"); label.textContent = name;
-    const track = document.createElement("div"); track.className = "track";
-    const fill = document.createElement("div"); fill.className = "fill"; fill.style.width = (p * 100).toFixed(1) + "%";
-    track.appendChild(fill);
-    const pct = document.createElement("span"); pct.textContent = (p * 100).toFixed(1) + "%"; pct.style.textAlign = "right";
-    row.append(label, track, pct); bars.appendChild(row);
+function remember(url, d) {
+  history = [{ url, cls:label(d) }].concat(history.filter((h) => h.url !== url)).slice(0, 5);
+  const box = $("history"); box.replaceChildren();
+  history.forEach((h) => {
+    const c = el("button", "chip"); c.type = "button"; c.title = h.url;
+    const dot = el("i"); dot.style.background = COLORS[h.cls] || "var(--muted)";
+    c.append(dot, el("span", null, h.url));
+    c.addEventListener("click", () => { input.value = h.url; check(); });
+    box.appendChild(c);
   });
+  $("historyRow").hidden = false;
+}
+
+/* split the URL for the anatomy view; every piece is inserted as text, never as HTML */
+function anatomy(raw) {
+  const box = $("anatomy"); box.replaceChildren();
+  const m = raw.match(/^(?:([a-z][a-z0-9+.-]*:\/\/))?([^\/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/i) || [];
+  const [, scheme = "", host = "", path = "", query = "", frag = ""] = m;
+  const put = (text, cls, lure) => {
+    if (!text) return;
+    if (!lure) { box.appendChild(el("span", cls, text)); return; }
+    let last = 0, r;
+    LURE.lastIndex = 0;
+    while ((r = LURE.exec(text))) {
+      if (r.index > last) box.appendChild(el("span", cls, text.slice(last, r.index)));
+      box.appendChild(el("span", "lure", r[0])); last = r.index + r[0].length;
+    }
+    if (last < text.length) box.appendChild(el("span", cls, text.slice(last)));
+  };
+  put(scheme, "scheme");
+  const at = host.lastIndexOf("@");
+  if (at >= 0) { box.appendChild(el("span", "bad", host.slice(0, at + 1))); }
+  const h = at >= 0 ? host.slice(at + 1) : host;
+  if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(h)) box.appendChild(el("span", "bad", h)); else put(h, "host", true);
+  const parts = path.split(/(\/\/)/);
+  parts.forEach((p) => { if (p === "//") box.appendChild(el("span", "bad", p)); else put(p, "path", true); });
+  put(query, "query", true); put(frag, "query");
+}
+
+function render(d, raw) {
+  const label_ = label(d), p = d.malicious_probability;
+  const risk = RISK[d.risk_level] || "var(--muted)";
+
+  const arc = $("arc"); arc.style.stroke = risk; arc.style.strokeDashoffset = 100;
+  requestAnimationFrame(() => requestAnimationFrame(() => { arc.style.strokeDashoffset = 100 - p * 100; }));
+  $("pct").textContent = (p * 100).toFixed(1) + "%";
+  const badge = $("badge"); badge.textContent = label_; badge.style.background = COLORS[label_] || risk;
+  $("risk").textContent = "risk: " + d.risk_level;
+
+  const probs = $("probs"); probs.replaceChildren();
+  Object.entries(d.probabilities).sort((a, b) => b[1] - a[1]).forEach(([name, v], i) => {
+    const row = el("div", "prob" + (i === 0 ? " lead" : "")); row.style.setProperty("--c", COLORS[name] || "var(--accent)");
+    const lab = el("b"); lab.append(el("i"), document.createTextNode(name));
+    const rail = el("div", "rail"), fill = el("div", "fill"); rail.appendChild(fill);
+    row.append(lab, rail, el("em", null, (v * 100).toFixed(1) + "%")); probs.appendChild(row);
+    requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = (v * 100).toFixed(1) + "%"; }));
+  });
+
+  anatomy(raw);
 
   const tips = $("tips"); tips.replaceChildren();
-  (d.tips || []).forEach((t) => { const li = document.createElement("li"); li.textContent = t; tips.appendChild(li); });
-
+  (d.tips || []).forEach((t) => { const li = el("li"); const ic = el("span"); ic.innerHTML = ICON; li.append(ic, el("span", null, t)); tips.appendChild(li); });
   $("notice").textContent = d.notice || ""; $("notice").hidden = !d.notice;
 
-  const table = $("features"); table.replaceChildren();
-  Object.entries(d.features || {}).forEach(([k, v]) => {
-    const tr = document.createElement("tr");
-    const a = document.createElement("td"); a.textContent = k;
-    const b = document.createElement("td"); b.textContent = Number.isInteger(v) ? v : v.toFixed(3);
-    tr.append(a, b); table.appendChild(tr);
+  const f = d.features || {};
+  const flags = $("flags"); flags.replaceChildren();
+  [["has_ip","Raw IP host"],["is_shortened","Shortened link"],["has_at_symbol","@ in URL"],["has_double_slash_redirect","Double-slash redirect"],["uses_https_token","'https' token inside URL"],["abnormal_url","Abnormal URL"]]
+    .forEach(([k, name]) => flags.appendChild(el("span", "flag" + (f[k] >= 1 ? " on" : ""), name)));
+  const stats = $("stats"); stats.replaceChildren();
+  [["url_length","length"],["num_subdomains","subdomains"],["num_suspicious_words","lure words"],["entropy","entropy"],["digit_ratio","digits"]].forEach(([k, name]) => {
+    const v = f[k] == null ? "–" : k === "entropy" ? f[k].toFixed(2) : k === "digit_ratio" ? Math.round(f[k] * 100) + "%" : f[k];
+    const s = el("div", "stat"); s.append(el("b", null, String(v)), el("small", null, name)); stats.appendChild(s);
   });
-  $("result").hidden = false;
+  const table = $("features"); table.replaceChildren();
+  Object.entries(f).forEach(([k, v]) => {
+    const tr = el("tr"); tr.append(el("td", null, k), el("td", null, Number.isInteger(v) ? v : v.toFixed(3))); table.appendChild(tr);
+  });
+
+  const res = $("result"); res.hidden = false;
+  res.classList.remove("reveal"); void res.offsetWidth; res.classList.add("reveal");
 }
 </script>
 </body>
